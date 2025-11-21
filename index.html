@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cotizador - Dorado360</title>
+
+  <!-- Tailwind (Play CDN, para prototipo/preview rápido) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React + ReactDOM + Babel (para ejecutar JSX en el navegador) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* Ajustes menores para el slider en distintos navegadores */
+    input[type="range"] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 999px; background: #F59E0B; box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer; border: 2px solid white; }
+    input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 999px; background: #F59E0B; border: 2px solid white; cursor: pointer; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans">
+
+  <div id="root" class="min-h-screen"></div>
+
+  <!-- Link al PDF subido (ruta local que debes poder convertir a URL en tu entorno) -->
+  <!-- Dev note: la ruta local está incluida tal como se subió. -->
+  <div class="hidden">
+    <a id="pdf-link" href="sandbox:/mnt/data/DISPONIBILIDAD - DORADO350 - 11NOV2025.pdf">Disponibilidad PDF</a>
+  </div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- ICONS (simple inline SVGs, tamaños ajustables) ---
+    const Icon = ({ children, size = 20, className = '' }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+        {children}
+      </svg>
+    );
+
+    const HomeIcon = (props) => (
+      <Icon {...props}>
+        <path d="M3 11.5L12 4l9 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9 21V13h6v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+    const UserIcon = (props) => (
+      <Icon {...props}>
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+    const PrinterIcon = (props) => (
+      <Icon {...props}>
+        <rect x="6" y="9" width="12" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M6 13H4a1 1 0 0 0-1 1v4h18v-4a1 1 0 0 0-1-1h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9 9V5h6v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+    const FileTextIcon = (props) => (
+      <Icon {...props}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M9 13h6M9 17h6M9 9h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+    const DollarIcon = (props) => (
+      <Icon {...props}>
+        <path d="M12 1v22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M17 5H9.5a3 3 0 0 0 0 6H15a3 3 0 0 1 0 6H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+    const CalculatorIcon = (props) => (
+      <Icon {...props}>
+        <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+        <rect x="7" y="7" width="10" height="6" rx="1" stroke="currentColor" strokeWidth="1.2"/>
+        <path d="M8 15h1M11 15h1M14 15h1M8 18h1M11 18h1M14 18h1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      </Icon>
+    );
+    const ClockIcon = (props) => (
+      <Icon {...props}>
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M12 7v6l4 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+    const ChevronDownIcon = (props) => (
+      <Icon {...props}>
+        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+    const ChevronUpIcon = (props) => (
+      <Icon {...props}>
+        <path d="M18 15l-6-6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </Icon>
+    );
+
+    // --- REAL DATA ---
+    const INVENTARIO = [
+      { id: '101', unidad: '101', recamaras: 1, area: 47.63, precio: 2145000, estado: 'Disponible', nivel: 1 },
+      { id: '102', unidad: '102', recamaras: 1, area: 47.63, precio: 0, estado: 'Vendido', nivel: 1 },
+      { id: '201', unidad: '201', recamaras: 2, area: 62.49, precio: 3054804, estado: 'Disponible', nivel: 2 },
+      { id: '202', unidad: '202', recamaras: 1, area: 42.17, precio: 0, estado: 'Vendido', nivel: 2 },
+      { id: '203', unidad: '203', recamaras: 2, area: 65.12, precio: 3192281, estado: 'Disponible', nivel: 2 },
+      { id: '301', unidad: '301', recamaras: 2, area: 62.49, precio: 3063833, estado: 'Disponible', nivel: 3 },
+      { id: '302', unidad: '302', recamaras: 1, area: 42.17, precio: 2138532, estado: 'Disponible', nivel: 3 },
+      { id: '303', unidad: '303', recamaras: 2, area: 65.12, precio: 3201716, estado: 'Disponible', nivel: 3 },
+      { id: '401', unidad: '401', recamaras: 2, area: 62.49, precio: 0, estado: 'Vendido', nivel: 4 },
+      { id: '402', unidad: '402', recamaras: 1, area: 42.17, precio: 2138532, estado: 'Disponible', nivel: 4 },
+      { id: '403', unidad: '403', recamaras: 2, area: 65.12, precio: 3214297, estado: 'Disponible', nivel: 4 },
+      { id: '501', unidad: '501', recamaras: 2, area: 62.49, precio: 0, estado: 'Vendido', nivel: 5 },
+      { id: '502', unidad: '502', recamaras: 1, area: 42.17, precio: 0, estado: 'Vendido', nivel: 5 },
+      { id: '503', unidad: '503', recamaras: 2, area: 65.12, precio: 0, estado: 'Vendido', nivel: 5 },
+      { id: 'E1', unidad: 'E1', recamaras: 0, area: 14.00, precio: 150000, estado: 'Disponible', nivel: 0, tipo: 'Estacionamiento' },
+      { id: 'E2', unidad: 'E2', recamaras: 0, area: 14.00, precio: 0, estado: 'Vendido', nivel: 0, tipo: 'Estacionamiento' },
+      { id: 'E3', unidad: 'E3', recamaras: 0, area: 14.00, precio: 0, estado: 'Vendido', nivel: 0, tipo: 'Estacionamiento' },
+    ];
+
+    const PLAZOS = [3, 6, 9, 12, 15, 18];
+
+    // --- UTILS ---
+    const formatMoney = (amount) => {
+      if (!amount) return formatCurrency(0);
+      return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 }).format(Number(amount));
+    };
+
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 }).format(Number(amount));
+    };
+
+    const formatDate = (dateString) => {
+      if (!dateString) return '';
+      const options = { year: 'numeric', month: 'long', day: 'numeric' };
+      return new Date(dateString + 'T00:00:00').toLocaleDateString('es-MX', options);
+    };
+
+    // --- Small reusable UI components ---
+    const Section = ({ title, icon: IconComp, children, defaultOpen = true }) => {
+      const [isOpen, setIsOpen] = useState(defaultOpen);
+      return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
+          <button 
+            onClick={() => setIsOpen(!isOpen)}
+            className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+          >
+            <div className="flex items-center gap-3 text-slate-800 font-semibold">
+              {IconComp && <span className="text-yellow-600"><IconComp size={20} /></span>}
+              <span>{title}</span>
+            </div>
+            <div className="text-gray-400">{isOpen ? <ChevronUpIcon size={20}/> : <ChevronDownIcon size={20}/>}</div>
+          </button>
+          {isOpen && <div className="p-5 border-t border-gray-100">{children}</div>}
+        </div>
+      );
+    };
+
+    const InputGroup = ({ label, value, onChange, type = "text", prefix, suffix, disabled = false, step }) => (
+      <div className="mb-3">
+        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">{label}</label>
+        <div className="relative">
+          {prefix && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">{prefix}</div>}
+          <input
+            type={type}
+            step={step}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            className={`w-full rounded-lg border ${disabled ? 'bg-gray-100 border-gray-200 text-gray-500' : 'bg-white border-gray-300 focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500'} py-2.5 ${prefix ? 'pl-10' : 'pl-3'} ${suffix ? 'pr-10' : 'pr-3'} transition-all text-sm sm:text-base shadow-sm`}
+          />
+          {suffix && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">{suffix}</div>}
+        </div>
+      </div>
+    );
+
+    // --- MAIN APP ---
+    function CotizadorApp() {
+      const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+      const [asesor, setAsesor] = useState('');
+      const [cliente, setCliente] = useState('');
+      const [unidadSeleccionada, setUnidadSeleccionada] = useState(null);
+
+      // Esquema de Pago
+      const [precioBase, setPrecioBase] = useState(0);
+      const [descuentoMonto, setDescuentoMonto] = useState(0);
+      const [descuentoPorcentaje, setDescuentoPorcentaje] = useState(0);
+
+      const [enganchePorcentaje, setEnganchePorcentaje] = useState(30);
+      const [engancheMonto, setEngancheMonto] = useState(0);
+
+      const [financiadoPorcentaje, setFinanciadoPorcentaje] = useState(50);
+      const [financiadoMonto, setFinanciadoMonto] = useState(0);
+
+      const [contraEntregaPorcentaje, setContraEntregaPorcentaje] = useState(20);
+      const [contraEntregaMonto, setContraEntregaMonto] = useState(0);
+
+      // Plazos y Políticas
+      const [plazoMeses, setPlazoMeses] = useState(12);
+      const [apartado, setApartado] = useState(50000);
+      const [diferirEnganche, setDiferirEnganche] = useState(1);
+      const [fechaInicioMensualidad, setFechaInicioMensualidad] = useState('');
+
+      useEffect(() => {
+        if (unidadSeleccionada) {
+          setPrecioBase(Number(unidadSeleccionada.precio || 0));
+        } else {
+          setPrecioBase(0);
+        }
+      }, [unidadSeleccionada]);
+
+      const precioFinal = Math.max(0, precioBase - Number(descuentoMonto || 0));
+
+      useEffect(() => {
+        if (precioFinal > 0) {
+          setEngancheMonto(precioFinal * (enganchePorcentaje / 100));
+          setFinanciadoMonto(precioFinal * (financiadoPorcentaje / 100));
+          setContraEntregaMonto(precioFinal * (contraEntregaPorcentaje / 100));
+        } else {
+          setEngancheMonto(0);
+          setFinanciadoMonto(0);
+          setContraEntregaMonto(0);
+        }
+      }, [precioFinal, enganchePorcentaje, financiadoPorcentaje, contraEntregaPorcentaje]);
+
+      const handleUnidadChange = (id) => {
+        const unidad = INVENTARIO.find(u => u.id === id);
+        setUnidadSeleccionada(unidad || null);
+        setDescuentoMonto(0);
+        setDescuentoPorcentaje(0);
+      };
+
+      const handleDescuentoChange = (val, type) => {
+        const numVal = Number(val || 0);
+        if (type === 'pct') {
+          setDescuentoPorcentaje(numVal);
+          setDescuentoMonto(precioBase * (numVal / 100));
+        } else {
+          setDescuentoMonto(numVal);
+          setDescuentoPorcentaje(precioBase ? (numVal / precioBase) * 100 : 0);
+        }
+      };
+
+      const handleEsquemaChange = (val, field, type) => {
+        const numVal = Number(val || 0);
+        let nuevoPct = 0;
+
+        if (type === 'amount') {
+          nuevoPct = precioFinal ? (numVal / precioFinal) * 100 : 0;
+        } else {
+          nuevoPct = numVal;
+        }
+
+        if (field === 'enganche') {
+          setEnganchePorcentaje(nuevoPct);
+          const restante = 100 - nuevoPct - financiadoPorcentaje;
+          setContraEntregaPorcentaje(Math.max(0, restante));
+        } else if (field === 'financiado') {
+          setFinanciadoPorcentaje(nuevoPct);
+          const restante = 100 - enganchePorcentaje - nuevoPct;
+          setContraEntregaPorcentaje(Math.max(0, restante));
+        } else if (field === 'contra') {
+          setContraEntregaPorcentaje(nuevoPct);
+          const restante = 100 - enganchePorcentaje - nuevoPct;
+          setFinanciadoPorcentaje(Math.max(0, restante));
+        }
+      };
+
+      const engancheNeto = engancheMonto - Number(apartado || 0);
+      const pagoMensualEnganche = diferirEnganche > 0 ? engancheNeto / diferirEnganche : engancheNeto;
+      const mensualidadFinanciada = plazoMeses > 0 ? financiadoMonto / plazoMeses : 0;
+
+      const handlePrint = () => {
+        window.print();
+      };
+
+      return (
+        <div className="min-h-screen pb-20">
+          <header className="bg-white text-slate-900 p-4 sticky top-0 z-50 shadow-lg">
+            <div className="max-w-4xl mx-auto flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center">
+                  <HomeIcon size={18} className="text-white" />
+                </div>
+                <h1 className="text-lg font-bold tracking-wide text-yellow-600">DORADO <span className="text-yellow-600">360</span></h1>
+              </div>
+              <div className="flex items-center gap-3">
+                <a className="text-sm text-gray-500 mr-2 underline" href="sandbox:/mnt/data/DISPONIBILIDAD - DORADO350 - 11NOV2025.pdf" target="_blank" rel="noreferrer">Ver PDF de Disponibilidad</a>
+                <button 
+                  onClick={handlePrint}
+                  disabled={!unidadSeleccionada}
+                  className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <PrinterIcon size={16} />
+                  <span className="hidden sm:inline">Exportar PDF</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-4xl mx-auto p-4 sm:p-6">
+            <Section title="Información General" icon={UserIcon}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <InputGroup label="Asesor" value={asesor} onChange={setAsesor} prefix={<UserIcon size={14}/>} />
+                <InputGroup label="Cliente" value={cliente} onChange={setCliente} prefix={<UserIcon size={14}/>} />
+                <InputGroup label="Fecha Cotización" type="date" value={fecha} onChange={setFecha} />
+              </div>
+            </Section>
+
+            <Section title="Selección de Unidad" icon={HomeIcon}>
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Unidad Disponibles</label>
+                <select 
+                  className="w-full p-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-base"
+                  onChange={(e) => handleUnidadChange(e.target.value)}
+                  defaultValue=""
+                >
+                  <option value="" disabled>Selecciona un departamento...</option>
+                  {INVENTARIO.map(u => (
+                    <option key={u.id} value={u.id} disabled={u.estado !== 'Disponible'}>
+                      {u.unidad} - {u.recamaras} Rec | {u.area}m² | {u.estado === 'Disponible' ? formatMoney(u.precio) : u.estado}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {unidadSeleccionada && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                  <div>
+                    <p className="text-xs text-blue-500 uppercase font-bold">Precio Lista</p>
+                    <p className="text-lg font-bold text-slate-800">{formatMoney(unidadSeleccionada.precio)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-500 uppercase font-bold">Area Total</p>
+                    <p className="text-lg font-bold text-slate-800">{unidadSeleccionada.area} m²</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-500 uppercase font-bold">Recámaras</p>
+                    <p className="text-lg font-bold text-slate-800">{unidadSeleccionada.recamaras}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-500 uppercase font-bold">Nivel</p>
+                    <p className="text-lg font-bold text-slate-800">{unidadSeleccionada.nivel === 0 ? 'PB/Ext' : `Piso ${unidadSeleccionada.nivel}`}</p>
+                  </div>
+                </div>
+              )}
+            </Section>
+
+            {unidadSeleccionada && (
+              <>
+                <Section title="Política Comercial" icon={DollarIcon}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+                        <p className="text-sm font-medium text-yellow-800 mb-2">Descuento Especial</p>
+                        <div className="flex gap-3">
+                          <div className="flex-1">
+                             <InputGroup 
+                              label="Porcentaje (%)" 
+                              type="number" 
+                              value={descuentoPorcentaje.toFixed(2)} 
+                              onChange={(v) => handleDescuentoChange(v, 'pct')} 
+                              suffix="%"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <InputGroup 
+                              label="Monto ($)" 
+                              type="number" 
+                              value={descuentoMonto} 
+                              onChange={(v) => handleDescuentoChange(v, 'amt')} 
+                              prefix="$"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col justify-center p-4 bg-gray-50 rounded-lg">
+                      <div className="flex justify-between items-end mb-1">
+                        <span className="text-sm text-gray-500">Precio Final</span>
+                        <span className="text-xl font-bold text-green-700">{formatMoney(precioFinal)}</span>
+                      </div>
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 w-full"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 pt-6 border-t border-gray-100">
+                    <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                      <ClockIcon size={16}/> Configuración de Tiempos
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <InputGroup 
+                        label="Apartado ($)" 
+                        type="number" 
+                        value={apartado} 
+                        onChange={(v) => setApartado(Number(v || 0))} 
+                        prefix="$"
+                      />
+                      <InputGroup 
+                        label="Inicio Mensualidad" 
+                        type="date" 
+                        value={fechaInicioMensualidad} 
+                        onChange={setFechaInicioMensualidad} 
+                      />
+                      <div>
+                         <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Diferir Enganche</label>
+                         <select 
+                          className="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-sm"
+                          value={diferirEnganche}
+                          onChange={(e) => setDiferirEnganche(Number(e.target.value))}
+                        >
+                          <option value={1}>1 Pago (Inmediato)</option>
+                          <option value={2}>2 Meses</option>
+                          <option value={3}>3 Meses</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </Section>
+
+                <Section title="Esquema de Pago (Flexible)" icon={CalculatorIcon}>
+                  <div className="space-y-8">
+                    <div className="relative">
+                      <div className="flex justify-between mb-2">
+                        <label className="font-bold text-slate-700">1. Enganche</label>
+                        <span className="text-sm text-gray-500">{enganchePorcentaje.toFixed(1)}%</span>
+                      </div>
+                      <input 
+                        type="range" min="1" max="100" step="0.5"
+                        value={enganchePorcentaje}
+                        onChange={(e) => handleEsquemaChange(e.target.value, 'enganche', 'pct')}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mb-3"
+                      />
+                      <div className="flex gap-4">
+                        <div className="w-24">
+                          <InputGroup value={enganchePorcentaje.toFixed(1)} onChange={(v) => handleEsquemaChange(v, 'enganche', 'pct')} suffix="%" type="number" />
+                        </div>
+                        <div className="flex-1">
+                          <InputGroup value={Math.round(engancheMonto)} onChange={(v) => handleEsquemaChange(v, 'enganche', 'amount')} prefix="$" type="number" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <div className="flex justify-between mb-2">
+                        <label className="font-bold text-slate-700">2. Financiado a Plazos</label>
+                        <span className="text-sm text-gray-500">{financiadoPorcentaje.toFixed(1)}%</span>
+                      </div>
+                       <input 
+                        type="range" min="0" max="100" step="0.5"
+                        value={financiadoPorcentaje}
+                        onChange={(e) => handleEsquemaChange(e.target.value, 'financiado', 'pct')}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-yellow-500 mb-3"
+                      />
+                      <div className="flex gap-4 items-start">
+                        <div className="w-24">
+                           <InputGroup value={financiadoPorcentaje.toFixed(1)} onChange={(v) => handleEsquemaChange(v, 'financiado', 'pct')} suffix="%" type="number" />
+                        </div>
+                        <div className="flex-1">
+                           <InputGroup value={Math.round(financiadoMonto)} onChange={(v) => handleEsquemaChange(v, 'financiado', 'amount')} prefix="$" type="number" />
+                        </div>
+                      </div>
+
+                      <div className="mt-2 bg-yellow-50 p-3 rounded-lg">
+                        <label className="block text-xs font-medium text-yellow-800 mb-2 uppercase">Seleccionar Plazo (Meses)</label>
+                        <div className="flex flex-wrap gap-2">
+                          {PLAZOS.map(p => (
+                            <button
+                              key={p}
+                              onClick={() => setPlazoMeses(p)}
+                              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${plazoMeses === p ? 'bg-yellow-500 text-white shadow-md transform scale-105' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'}`}
+                            >
+                              {p} Meses
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <div className="flex justify-between mb-2">
+                        <label className="font-bold text-slate-700">3. Contra Entrega</label>
+                        <span className="text-sm text-gray-500">{contraEntregaPorcentaje.toFixed(1)}%</span>
+                      </div>
+                       <input 
+                        type="range" min="0" max="100" step="0.5"
+                        value={contraEntregaPorcentaje}
+                        onChange={(e) => handleEsquemaChange(e.target.value, 'contra', 'pct')}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600 mb-3"
+                      />
+                      <div className="flex gap-4">
+                        <div className="w-24">
+                           <InputGroup value={contraEntregaPorcentaje.toFixed(1)} onChange={(v) => handleEsquemaChange(v, 'contra', 'pct')} suffix="%" type="number" />
+                        </div>
+                        <div className="flex-1">
+                           <InputGroup value={Math.round(contraEntregaMonto)} onChange={(v) => handleEsquemaChange(v, 'contra', 'amount')} prefix="$" type="number" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {(Number(enganchePorcentaje) + Number(financiadoPorcentaje) + Number(contraEntregaPorcentaje)).toFixed(0) !== "100" && (
+                      <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
+                        ⚠️ La suma de los porcentajes debe ser 100%. Actualmente: {(Number(enganchePorcentaje) + Number(financiadoPorcentaje) + Number(contraEntregaPorcentaje)).toFixed(1)}%
+                      </div>
+                    )}
+
+                  </div>
+                </Section>
+              </>
+            )}
+          </main>
+
+          {unidadSeleccionada && (
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] p-4 pb-6 z-40">
+               <div className="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div className="text-center sm:text-left">
+                    <p className="text-xs text-gray-500 uppercase font-bold tracking-wide">Mensualidad a {plazoMeses} Meses</p>
+                    <p className="text-2xl font-bold text-yellow-600">{formatMoney(mensualidadFinanciada)}</p>
+                  </div>
+                  <button 
+                    onClick={handlePrint}
+                    className="w-full sm:w-auto bg-slate-900 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-slate-800 hover:scale-105 transition-all flex justify-center items-center gap-2"
+                  >
+                    <FileTextIcon size={20} />
+                    Ver Cotización PDF
+                  </button>
+               </div>
+            </div>
+          )}
+
+          {/* PRINTABLE AREA */}
+          <div className="hidden print:block bg-white p-10 max-w-[210mm] mx-auto min-h-[297mm]">
+            <div className="flex justify-between items-start mb-10 border-b-2 border-yellow-500 pb-6">
+               <div>
+                  <h1 className="text-3xl font-bold text-slate-900">COTIZACIÓN</h1>
+                  <p className="text-slate-500 mt-1">DORADO 360 - Condominios de Lujo</p>
+               </div>
+               <div className="text-right">
+                  <div className="w-16 h-16 bg-yellow-500 rounded-full flex items-center justify-center ml-auto mb-2">
+                    <HomeIcon size={32} className="text-slate-900" />
+                  </div>
+                  <p className="text-sm text-gray-500">{formatDate(fecha)}</p>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 mb-8">
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 uppercase mb-1">Cliente</h3>
+                <p className="text-lg font-semibold border-b border-gray-200 pb-1">{cliente || '__________________'}</p>
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-gray-400 uppercase mb-1">Asesor</h3>
+                <p className="text-lg font-semibold border-b border-gray-200 pb-1">{asesor || '__________________'}</p>
+              </div>
+            </div>
+
+            {unidadSeleccionada && (
+              <div className="mb-8">
+                <h2 className="text-xl font-bold text-slate-800 mb-4 border-l-4 border-yellow-500 pl-3">Detalles de la Propiedad</h2>
+                <table className="w-full text-sm text-left text-gray-600">
+                  <thead className="bg-gray-100 text-gray-700 uppercase text-xs">
+                    <tr>
+                      <th className="px-4 py-3 rounded-l-lg">Unidad</th>
+                      <th className="px-4 py-3">Recámaras</th>
+                      <th className="px-4 py-3">Área (m²)</th>
+                      <th className="px-4 py-3 text-right rounded-r-lg">Precio Lista</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-100">
+                      <td className="px-4 py-3 font-bold">{unidadSeleccionada.unidad}</td>
+                      <td className="px-4 py-3">{unidadSeleccionada.recamaras}</td>
+                      <td className="px-4 py-3">{unidadSeleccionada.area}</td>
+                      <td className="px-4 py-3 text-right font-bold">{formatMoney(unidadSeleccionada.precio)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                {descuentoMonto > 0 && (
+                   <div className="flex justify-end mt-2 text-sm">
+                     <span className="mr-4 text-gray-500">Descuento aplicado ({descuentoPorcentaje.toFixed(2)}%):</span>
+                     <span className="font-bold text-red-500">- {formatMoney(descuentoMonto)}</span>
+                   </div>
+                )}
+                <div className="flex justify-end mt-2 text-lg">
+                     <span className="mr-4 font-bold text-slate-800">Precio Final:</span>
+                     <span className="font-bold text-green-700">{formatMoney(precioFinal)}</span>
+                   </div>
+              </div>
+            )}
+
+            <div className="mb-10">
+               <h2 className="text-xl font-bold text-slate-800 mb-4 border-l-4 border-yellow-500 pl-3">Esquema Financiero</h2>
+               <div className="mb-6 bg-slate-50 p-4 rounded-lg">
+                 <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-slate-700">1. Enganche Total ({enganchePorcentaje.toFixed(2)}%)</h3>
+                    <span className="font-bold text-slate-800">{formatMoney(engancheMonto)}</span>
+                 </div>
+                 <div className="pl-4 text-sm text-gray-600 space-y-1 border-l-2 border-gray-300 ml-2">
+                    <div className="flex justify-between">
+                      <span>Apartado (Pago Inicial):</span>
+                      <span>{formatMoney(apartado)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium text-slate-800 pt-1">
+                      <span>Restante de Enganche:</span>
+                      <span>{formatMoney(engancheNeto)}</span>
+                    </div>
+                    {diferirEnganche > 1 && (
+                       <div className="flex justify-between text-blue-600 italic text-xs pt-1">
+                        <span>* Diferido a {diferirEnganche} pagos mensuales de:</span>
+                        <span>{formatMoney(pagoMensualEnganche)}</span>
+                      </div>
+                    )}
+                 </div>
+               </div>
+
+               <div className="mb-6 bg-slate-50 p-4 rounded-lg">
+                 <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-slate-700">2. Financiado ({financiadoPorcentaje.toFixed(2)}%)</h3>
+                    <span className="font-bold text-slate-800">{formatMoney(financiadoMonto)}</span>
+                 </div>
+                 <div className="pl-4 text-sm text-gray-600 space-y-1 border-l-2 border-gray-300 ml-2">
+                    <div className="flex justify-between">
+                      <span>Plazo seleccionado:</span>
+                      <span>{plazoMeses} Meses</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Fecha 1ra Mensualidad:</span>
+                      <span>{formatDate(fechaInicioMensualidad) || 'A definir'}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-yellow-700 bg-yellow-100 p-2 rounded mt-2">
+                      <span>MENSUALIDAD:</span>
+                      <span>{formatMoney(mensualidadFinanciada)}</span>
+                    </div>
+                 </div>
+               </div>
+
+               <div className="mb-6 bg-slate-50 p-4 rounded-lg">
+                 <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700">3. Contra Entrega ({contraEntregaPorcentaje.toFixed(2)}%)</h3>
+                    <span className="font-bold text-slate-800">{formatMoney(contraEntregaMonto)}</span>
+                 </div>
+               </div>
+            </div>
+
+            <div className="mt-auto pt-12 text-center text-xs text-gray-400">
+              <p className="mb-4">Esta cotización tiene una validez de 7 días naturales a partir de la fecha de emisión. Precios y disponibilidad sujetos a cambio sin previo aviso.</p>
+              <div className="grid grid-cols-2 gap-20 mt-16">
+                <div className="border-t border-gray-300 pt-2">Firma del Asesor</div>
+                <div className="border-t border-gray-300 pt-2">Firma del Cliente</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Render app
+    ReactDOM.createRoot(document.getElementById('root')).render(<CotizadorApp />);
+
+  </script>
+</body>
+</html>
