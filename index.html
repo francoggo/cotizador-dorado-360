@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { User, Home, DollarSign, FileText, Calculator, Clock, Printer, ChevronDown, ChevronUp, Calendar as CalendarIcon, CheckCircle, MapPin } from 'lucide-react';
+import { 
+  User, 
+  Home, 
+  DollarSign, 
+  FileText, 
+  Calculator, 
+  Clock, 
+  Printer, 
+  ChevronDown, 
+  ChevronUp, 
+  Calendar as CalendarIcon, 
+  CheckCircle, 
+  MapPin 
+} from 'lucide-react';
 
 // --- DATA INVENTARIO ---
 const INVENTARIO = [
@@ -32,6 +45,7 @@ const formatMoney = (amount) => {
 const formatDate = (dateString) => {
   if (!dateString) return 'No definida';
   const [year, month, day] = dateString.split('-');
+  // Crear fecha usando constructor local para evitar problemas de zona horaria UTC
   const date = new Date(year, month - 1, day);
   const options = { year: 'numeric', month: 'long', day: 'numeric' };
   return date.toLocaleDateString('es-MX', options);
@@ -138,6 +152,7 @@ export default function CotizadorDorado360() {
   const handleUnidadChange = (id) => {
     const unidad = INVENTARIO.find(u => u.id === id);
     setUnidadSeleccionada(unidad);
+    // Al cambiar unidad reseteamos descuentos
     setDescuentoMonto(0);
     setDescuentoPorcentaje(0);
   };
@@ -179,7 +194,7 @@ export default function CotizadorDorado360() {
 
   // Final Calculations
   const engancheNeto = Math.max(0, engancheMonto - apartado);
-  const pagoMensualEnganche = diferirEnganche > 0 ? engancheNeto / diferirEnganche : engancheNeto;
+  // const pagoMensualEnganche = diferirEnganche > 0 ? engancheNeto / diferirEnganche : engancheNeto; // Variable calculada pero no usada directamente en estado, usada en render.
   const mensualidadFinanciada = plazoMeses > 0 ? financiadoMonto / plazoMeses : 0;
 
   // Generar Mini Tabla de Amortización
@@ -187,14 +202,16 @@ export default function CotizadorDorado360() {
     let tabla = [];
     let count = 0;
     
+    // Periodo de gracia / diferimiento
     for (let i = 1; i <= Math.min(mesesDiferido, 3); i++) {
        const fechaPago = addMonths(fechaInicioMensualidad, i);
        tabla.push({ numero: 'DIF', fecha: formatDate(fechaPago), monto: '---', saldo: formatMoney(financiadoMonto) });
        count++;
     }
 
+    // Pagos normales
     for (let i = 1; i <= plazoMeses; i++) {
-        if (count >= 7) break; // Max rows to fit
+        if (count >= 7) break; // Limite visual para mantener en 1 página
         const fechaPago = addMonths(fechaInicioPagosReal, i - 1);
         const saldoRestante = financiadoMonto - (mensualidadFinanciada * i);
         tabla.push({ 
@@ -209,7 +226,9 @@ export default function CotizadorDorado360() {
   };
 
   const handlePrint = () => {
-    window.print();
+    if (typeof window !== 'undefined') {
+      window.print();
+    }
   };
 
   return (
